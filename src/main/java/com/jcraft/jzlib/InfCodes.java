@@ -111,7 +111,7 @@ final class InfCodes{
 
   int proc(int r){ 
     int j;              // temporary storage
-    int[] t;            // temporary pointer
+    //int[] t;          //Never used  // temporary pointer
     int tindex;         // temporary pointer
     int e;              // extra bits or operation
     int b=0;            // bit buffer

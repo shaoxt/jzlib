@@ -144,7 +144,7 @@ final class Deflate implements Cloneable {
   static final private int Z_ASCII=1;
   static final private int Z_UNKNOWN=2;
 
-  static final private int Buf_size=8*2;
+  static final private int BUF_SIZE =8;
 
   // repeat previous bit length 3-6 times (2 bits of repeat count)
   static final private int REP_3_6=16; 
@@ -253,9 +253,9 @@ final class Deflate implements Cloneable {
   // Stop searching when current match exceeds this
   int nice_match;
 
-  short[] dyn_ltree;       // literal and length tree
-  short[] dyn_dtree;       // distance tree
-  short[] bl_tree;         // Huffman tree for bit lengths
+  int[] dyn_ltree;       // literal and length tree
+  int[] dyn_dtree;       // distance tree
+  int[] bl_tree;         // Huffman tree for bit lengths
 
   Tree l_desc=new Tree();  // desc for literal tree
   Tree d_desc=new Tree();  // desc for distance tree
@@ -277,7 +277,7 @@ final class Deflate implements Cloneable {
   // Depth of each subtree used as tie breaker for trees of equal frequency
   byte[] depth=new byte[2*L_CODES+1];
 
-  byte[] l_buf;               // index for literals or lengths */
+  int[] l_buf;               // index for literals or lengths */
 
   // Size of match buffer for literals/lengths.  There are 4 reasons for
   // limiting lit_bufsize to 64K:
@@ -315,6 +315,8 @@ final class Deflate implements Cloneable {
   // significant bits).
   short bi_buf;
 
+    byte buf;
+
   // Number of valid bits in bi_buf.  All bits above the last valid bit
   // are always zero.
   int bi_valid;
@@ -323,9 +325,9 @@ final class Deflate implements Cloneable {
 
   Deflate(ZStream strm){
     this.strm=strm;
-    dyn_ltree=new short[HEAP_SIZE*2];
-    dyn_dtree=new short[(2*D_CODES+1)*2]; // distance tree
-    bl_tree=new short[(2*BL_CODES+1)*2];  // Huffman tree for bit lengths
+    dyn_ltree=new int[HEAP_SIZE*2];
+    dyn_dtree=new int[(2*D_CODES+1)*2]; // distance tree
+    bl_tree=new int[(2*BL_CODES+1)*2];  // Huffman tree for bit lengths
   }
 
   void lm_init() {
@@ -385,7 +387,7 @@ final class Deflate implements Cloneable {
   // exchanging a node with the smallest of its two sons if necessary, stopping
   // when the heap property is re-established (each father smaller than its
   // two sons).
-  void pqdownheap(short[] tree,  // the tree to restore
+  void pqdownheap(int[] tree,  // the tree to restore
 		  int k          // node to move down
 		  ){
     int v = heap[k];
@@ -407,16 +409,16 @@ final class Deflate implements Cloneable {
     heap[k] = v;
   }
 
-  static boolean smaller(short[] tree, int n, int m, byte[] depth){
-    short tn2=tree[n*2];
-    short tm2=tree[m*2];
+  static boolean smaller(int[] tree, int n, int m, byte[] depth){
+    int tn2=tree[n*2];
+    int tm2=tree[m*2];
     return (tn2<tm2 ||
 	    (tn2==tm2 && depth[n] <= depth[m]));
   }
 
   // Scan a literal or distance tree to determine the frequencies of the codes
   // in the bit length tree.
-  void scan_tree (short[] tree,// the tree to be scanned
+  void scan_tree (int[] tree,// the tree to be scanned
 		  int max_code // and its largest code of non zero frequency
 		  ){
     int n;                     // iterates over all tree elements
@@ -506,7 +508,7 @@ final class Deflate implements Cloneable {
 
   // Send a literal or distance tree in compressed form, using the codes in
   // bl_tree.
-  void send_tree (short[] tree,// the tree to be sent
+  void send_tree (int[] tree,// the tree to be sent
 		  int max_code // and its largest code of non zero frequency
 		  ){
     int n;                     // iterates over all tree elements
@@ -518,7 +520,7 @@ final class Deflate implements Cloneable {
     int min_count = 4;         // min repeat count
 
     if (nextlen == 0){ max_count = 138; min_count = 3; }
-
+    
     for (n = 0; n <= max_code; n++) {
       curlen = nextlen; nextlen = tree[(n+1)*2+1];
       if(++count < max_count && curlen == nextlen) {
@@ -565,35 +567,146 @@ final class Deflate implements Cloneable {
   final void put_byte(byte c){
     pending_buf[pending++]=c;
   }
-  final void put_short(int w) {
-    put_byte((byte)(w/*&0xff*/));
-    put_byte((byte)(w>>>8));
-  }
-  final void putShortMSB(int b){
-    put_byte((byte)(b>>8));
-    put_byte((byte)(b/*&0xff*/));
-  }   
+  
+//  final void put_short(int w) {
+//	  //Eliminate the method for performance tuning
+//	  pending_buf[pending++]= (byte)w;
+//	  pending_buf[pending++]= (byte)(w>>>8);
+//
+////    put_byte((byte)(w/*&0xff*/));
+////    put_byte((byte)(w>>>8));
+//  }
+//
+//  final void putShortMSB(int b){
+//	  pending_buf[pending++]= (byte)(b>>8);
+//	  pending_buf[pending++]= (byte)b;
+//
+////    put_byte((byte)(b>>8));
+////    put_byte((byte)(b/*&0xff*/));
+//  }
 
-  final void send_code(int c, short[] tree){
-    int c2=c*2;
-    send_bits((tree[c2]&0xffff), (tree[c2+1]&0xffff));
+    final void put_short(int w) {
+//        byte[] array = ARRAY_SHORT[w & 0xFFFF];
+//        pending_buf[pending++]=array[0];
+//        pending_buf[pending++]=array[1];
+        put_byte((byte)(w/*&0xff*/));
+        put_byte((byte)(w>>>8));
+    }
+    final void putShortMSB(int b){
+//    put_byte((byte)(b>>8));
+//    put_byte((byte)(b/*&0xff*/));
+        byte[] array = ARRAY_SHORT_MSB[b & 0xFFFF];
+        pending_buf[pending++]=array[0];
+        pending_buf[pending++]=array[1];
+    }
+
+    private static byte[][] ARRAY_SHORT = new byte[64*1024][2];
+
+    static {
+        for(int i = 0; i <= 0xFFFF; i++) {
+            ARRAY_SHORT[i][0] = (byte)i;
+            ARRAY_SHORT[i][1] = (byte)(i>>>8);
+        }
+    }
+
+    private static byte[][] ARRAY_SHORT_MSB = new byte[64*1024][2];
+
+    static {
+        for(int i = 0; i <= 0xFFFF; i++) {
+            ARRAY_SHORT_MSB[i][0] = (byte)(i>>8);
+            ARRAY_SHORT_MSB[i][1] = (byte)i;
+        }
+    }
+
+    private static short[][] SHIFT_LEFT = new short[64*1024][17];
+
+    static {
+        for(int i = 0; i <= 0xFFFF; i++) {
+            for(int j = 0;j <= 0x10; j++) {
+                SHIFT_LEFT[i][j] = (short)((i << j)&0xffff);
+            }
+        }
+    }
+
+    private static short[][] SHIFT_RIGHT = new short[64*1024][17];
+
+    static {
+        for(int i = 0; i <= 0xFFFF; i++) {
+            for(int j = 0;j <= 0x10; j++) {
+                SHIFT_RIGHT[i][j] = (short)(i >>> (BUF_SIZE - j));
+            }
+        }
+    }
+
+  final void send_code(int c, int[] tree){
+    int c2= c << 1; //*2
+      send_bits(tree[c2], tree[c2+1]);
+//    int len = tree[c2+1];
+//    int value = tree[c2];
+//    int rest = (int) BUF_SIZE - len;
+//
+//    if (bi_valid > rest) {
+////        bi_buf |= SHIFT_LEFT[value][bi_valid];
+//        bi_buf |= ((value << bi_valid)&0xffff);
+//        put_short(bi_buf);
+//	  //pending_buf[pending++]= (byte)bi_buf;
+//	  //pending_buf[pending++]= (byte)(bi_buf>>>8);
+////      bi_buf = SHIFT_RIGHT[value][bi_valid];
+//      bi_buf = (short)(value >>> (BUF_SIZE - bi_valid));
+//      bi_valid -= rest;
+//    } else {
+//        bi_buf |= (((value) << bi_valid)&0xffff);
+////      bi_buf |= SHIFT_LEFT[value][bi_valid]; //
+//      bi_valid += len;
+//    }
   }
 
   void send_bits(int value, int length){
-    int len = length;
-    if (bi_valid > (int)Buf_size - len) {
-      int val = value;
+
+
+      int rest = BUF_SIZE - length;
+
+    if (bi_valid > rest) {
+      //int val = value;
 //      bi_buf |= (val << bi_valid);
-      bi_buf |= ((val << bi_valid)&0xffff);
-      put_short(bi_buf);
-      bi_buf = (short)(val >>> (Buf_size - bi_valid));
-      bi_valid += len - Buf_size;
+//      bi_buf |= ((value << bi_valid)&0xffff);
+
+        buf |= ((value << bi_valid) & 0xFF);
+        pending_buf[pending++]=buf;
+
+//        put_byte(buf);
+
+        int left = length+bi_valid-BUF_SIZE;
+        int v = (value >>> (BUF_SIZE-bi_valid));
+        if (left > BUF_SIZE) {
+//            put_byte((byte)(v&0xFF));
+            pending_buf[pending++]=(byte)(v&0xFF);
+            left -= BUF_SIZE;
+            buf = (byte)(v >> BUF_SIZE);
+        }
+        else {
+            buf = (byte)v;
+        }
+        bi_valid = left;
+
+
+//        bi_buf |= SHIFT_LEFT[value][bi_valid];
+//      put_short(bi_buf);
+//	  pending_buf[pending++]= (byte)bi_buf;
+//	  pending_buf[pending++]= (byte)(bi_buf>>>8);
+//      bi_buf = SHIFT_RIGHT[value][bi_valid];//
+
+//      bi_buf = (short)(value >>> (BUF_SIZE - bi_valid));
+
     } else {
 //      bi_buf |= (value) << bi_valid;
-      bi_buf |= (((value) << bi_valid)&0xffff);
-      bi_valid += len;
+//      bi_buf |= SHIFT_LEFT[value][bi_valid];
+      buf |= (((value) << bi_valid)&0xff);
+      bi_valid += length;
     }
   }
+
+
 
   // Send one empty static block to give enough lookahead for inflate.
   // This takes 10 bits, of which 7 may remain in the bit buffer.
@@ -632,7 +745,8 @@ final class Deflate implements Cloneable {
     pending_buf[d_buf+last_lit*2] = (byte)(dist>>>8);
     pending_buf[d_buf+last_lit*2+1] = (byte)dist;
 
-    l_buf[last_lit] = (byte)lc; last_lit++;
+    l_buf[last_lit] = lc;
+    last_lit++;
 
     if (dist == 0) {
       // lc is the unmatched char
@@ -666,18 +780,33 @@ final class Deflate implements Cloneable {
   }
 
   // Send the block data compressed using the given Huffman trees
-  void compress_block(short[] ltree, short[] dtree){
+  void compress_block(int[] ltree, int[] dtree){
     int  dist;      // distance of matched string
     int lc;         // match length or unmatched char (if dist == 0)
     int lx = 0;     // running index in l_buf
     int code;       // the code to send
     int extra;      // number of extra bits to send
+    int off;
 
+//    if (dtree != StaticTree.static_dtree) {
+//	    for(int i = 0, size = dtree.length; i < size; i ++) {
+//	    	dtree[i] = dtree[i] & 0xFFFF;
+//	    }
+//    }
+//    if (ltree != StaticTree.static_ltree) {
+//	    for(int i = 0, size = ltree.length; i < size; i ++) {
+//	    	ltree[i] = ltree[i] & 0xFFFF;
+//	    }
+//    }
+    
     if (last_lit != 0){
       do{
-	dist=((pending_buf[d_buf+lx*2]<<8)&0xff00)|
-	  (pending_buf[d_buf+lx*2+1]&0xff);
-	lc=(l_buf[lx])&0xff; lx++;
+    	  off = d_buf + (lx << 1);
+    	  
+	   dist=((pending_buf[off]<<8)&0xff00)|(pending_buf[off+1]&0xff);
+	   
+	lc=(l_buf[lx]);
+	lx++;
 
 	if(dist == 0){
 	  send_code(lc, ltree); // send a literal byte
@@ -685,7 +814,7 @@ final class Deflate implements Cloneable {
 	else{
 	  // Here, lc is the match length - MIN_MATCH
 	  code = Tree._length_code[lc];
-
+                            
 	  send_code(code+LITERALS+1, ltree); // send the length code
 	  extra = Tree.extra_lbits[code];
 	  if(extra != 0){
@@ -693,7 +822,8 @@ final class Deflate implements Cloneable {
 	    send_bits(lc, extra);       // send the extra length bits
 	  }
 	  dist--; // dist is now the match distance - 1
-	  code = Tree.d_code(dist);
+//	  code = Tree.d_code(dist);
+	  code = ((dist) < 256 ? Tree._dist_code[dist] : Tree._dist_code[256+((dist)>>>7)]);
 
 	  send_code(code, dtree);       // send the distance code
 	  extra = Tree.extra_dbits[code];
@@ -734,7 +864,7 @@ final class Deflate implements Cloneable {
       bi_valid=0;
     }
     else if (bi_valid >= 8) {
-      put_byte((byte)bi_buf);
+    	pending_buf[pending++] = (byte)bi_buf;
       bi_buf>>>=8;
       bi_valid-=8;
     }
@@ -745,7 +875,7 @@ final class Deflate implements Cloneable {
     if (bi_valid > 8) {
       put_short(bi_buf);
     } else if (bi_valid > 0) {
-      put_byte((byte)bi_buf);
+    	pending_buf[pending++] = (byte)bi_buf;
     }
     bi_buf = 0;
     bi_valid = 0;
@@ -757,7 +887,7 @@ final class Deflate implements Cloneable {
 		  int len,         // its length
 		  boolean header   // true if block header must be written
 		  ){
-    int index=0;
+    //int index=0;  //Never used
     bi_windup();      // align on byte boundary
     last_eob_len = 8; // enough lookahead for inflate
 
@@ -1385,7 +1515,7 @@ final class Deflate implements Cloneable {
     pending_buf_size = lit_bufsize*3;
 
     d_buf = lit_bufsize;
-    l_buf = new byte[lit_bufsize];
+    l_buf = new int[lit_bufsize];
 
     this.level = level;
 
@@ -1632,14 +1762,14 @@ final class Deflate implements Cloneable {
 
     if(wrap==2){
       long adler=strm.adler.getValue();
-      put_byte((byte)(adler&0xff));
-      put_byte((byte)((adler>>8)&0xff));
-      put_byte((byte)((adler>>16)&0xff));
-      put_byte((byte)((adler>>24)&0xff));
-      put_byte((byte)(strm.total_in&0xff));
-      put_byte((byte)((strm.total_in>>8)&0xff));
-      put_byte((byte)((strm.total_in>>16)&0xff));
-      put_byte((byte)((strm.total_in>>24)&0xff));
+      pending_buf[pending++] = (byte)(adler&0xff);
+      pending_buf[pending++] = (byte)((adler>>8)&0xff);
+      pending_buf[pending++] = (byte)((adler>>16)&0xff);
+      pending_buf[pending++] = ((byte)((adler>>24)&0xff));
+      pending_buf[pending++] = (byte)(strm.total_in&0xff);
+      pending_buf[pending++] = (byte)((strm.total_in>>8)&0xff);
+      pending_buf[pending++] =  (byte)((strm.total_in>>16)&0xff);
+      pending_buf[pending++] = (byte)((strm.total_in>>24)&0xff);
 
       getGZIPHeader().setCRC(adler);
     } 

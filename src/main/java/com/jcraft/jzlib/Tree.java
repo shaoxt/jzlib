@@ -149,7 +149,7 @@ final class Tree{
     return ((dist) < 256 ? _dist_code[dist] : _dist_code[256+((dist)>>>7)]);
   }
 
-  short[] dyn_tree;      // the dynamic tree
+  int[] dyn_tree;      // the dynamic tree
   int     max_code;      // largest code with non zero frequency
   StaticTree stat_desc;  // the corresponding static tree
 
@@ -162,8 +162,8 @@ final class Tree{
   //     The length opt_len is updated; static_len is also updated if stree is
   //     not null.
   void gen_bitlen(Deflate s){
-    short[] tree = dyn_tree;
-    short[] stree = stat_desc.static_tree;
+    int[] tree = dyn_tree;
+    int[] stree = stat_desc.static_tree;
     int[] extra = stat_desc.extra_bits;
     int base = stat_desc.extra_base;
     int max_length = stat_desc.max_length;
@@ -171,7 +171,7 @@ final class Tree{
     int n, m;           // iterate over the tree elements
     int bits;           // bit length
     int xbits;          // extra bits
-    short f;            // frequency
+    int f;            // frequency
     int overflow = 0;   // number of elements with bit length too large
 
     for (bits = 0; bits <= MAX_BITS; bits++) s.bl_count[bits] = 0;
@@ -233,8 +233,8 @@ final class Tree{
   //     and corresponding code. The length opt_len is updated; static_len is
   //     also updated if stree is not null. The field max_code is set.
   void build_tree(Deflate s){
-    short[] tree=dyn_tree;
-    short[] stree=stat_desc.static_tree;
+    int[] tree=dyn_tree;
+    int[] stree=stat_desc.static_tree;
     int elems=stat_desc.elems;
     int n, m;          // iterate over heap elements
     int max_code=-1;   // largest code with non zero frequency
@@ -318,7 +318,7 @@ final class Tree{
   // OUT assertion: the field code is set for all tree elements of non
   //     zero code length.
   private final static void gen_codes(
-                        short[] tree, // the tree to decorate
+                        int[] tree, // the tree to decorate
                         int max_code, // largest code with non zero frequency
                         short[] bl_count, // number of codes at each bit length
                         short[] next_code){

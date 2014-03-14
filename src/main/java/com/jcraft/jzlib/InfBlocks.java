@@ -368,7 +368,7 @@ final class InfBlocks{
 	    break;
 	  }
 
-	  int[] h;
+	  //int[] h;  //Never used
 	  int i, j, c;
 
 	  t = bb[0];
